@@ -26,6 +26,7 @@
 #include "notificator.h"
 #include "guiutil.h"
 #include "rpcconsole.h"
+#include "version.h"
 
 #ifdef Q_OS_MAC
 #include "macdockiconhandler.h"
@@ -69,8 +70,20 @@ BitcoinGUI::BitcoinGUI(QWidget *parent):
     notificator(0),
     rpcConsole(0)
 {
+    setWindowOpacity(qreal(98)/100);
+    setStyleSheet("selection-color: #000066;");
     resize(850, 550);
-    setWindowTitle(tr("ZcCoin") + " - " + tr("Wallet"));
+
+    int y = (DISPLAY_VERSION_MAJOR);
+    int a = (DISPLAY_VERSION_MINOR);
+    int c = (DISPLAY_VERSION_REVISION);
+
+    QString titVersion = QString::number(y)+ "." +
+                  QString::number(a) + "." +
+                  QString::number(c);
+
+    setWindowTitle(tr("ZcCoin ") + tr("Wallet ") + "v" + (titVersion));
+
 #ifndef Q_OS_MAC
     qApp->setWindowIcon(QIcon(":icons/bitcoin"));
     setWindowIcon(QIcon(":icons/bitcoin"));

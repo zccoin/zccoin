@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
 
     // Show help message immediately after parsing command-line options (for "-lang") and setting locale,
     // but before showing splash screen.
-    if (mapArgs.count("-?") || mapArgs.count("--help"))
+    if (mapArgs.count("-?") || mapArgs.count("--h") || mapArgs.count("--help"))
     {
         GUIUtil::HelpMessageBox help;
         help.showOrPrint();
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
                 window.setWalletModel(0);
                 guiref = 0;
             }
-            // Shutdown the core and its threads, but don't exit Bitcoin-Qt here
+            // Shutdown the core and its threads, but don't exit Zccoin-Qt here
             Shutdown(NULL);
         }
         else
