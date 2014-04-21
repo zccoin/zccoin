@@ -8,7 +8,7 @@ ZcCoin - a hybrid scrypt PoW + PoS based cryptocurrency, forked from yacoin
 * Maximum PoW reward is 50 coins
 
 the offical website is located at:
-http://www.zhaocaibi.com/
+http://www.zccoin.org/
 
 Development process
 ===========================
