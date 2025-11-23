@@ -5,6 +5,10 @@ INCLUDEPATH += src src/json src/qt
 DEFINES += QT_GUI BOOST_THREAD_USE_LIB BOOST_SPIRIT_THREADSAFE SCRYPT_CHACHA SCRYPT_KECCAK512
 CONFIG += no_include_pwd
 CONFIG += thread
+QT += core gui network
+greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+macx:QT += macextras
+QMAKE_CXXFLAGS += -std=gnu++17 -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR -D_LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE -D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS
 
 # for boost 1.37, add -mt to the boost libraries
 # use: qmake BOOST_LIB_SUFFIX=-mt
@@ -22,6 +26,28 @@ CONFIG += thread
  MINIUPNPC_LIB_PATH = C:/miniupnpc-1.6-mgw
  #BDB_LIB_SUFFIX = -5.3
  BOOST_LIB_SUFFIX = -mgw46-mt-s-1_50
+
+macx {
+    # Homebrew / local paths
+    BOOST_INCLUDE_PATH = /usr/local/include
+    BOOST_LIB_PATH = /usr/local/lib
+    BOOST_LIB_SUFFIX = -mt
+    BOOST_THREAD_LIB_SUFFIX = -mt
+
+    BDB_INCLUDE_PATH = /usr/local/Cellar/berkeley-db@4/4.8.30/include
+    BDB_LIB_PATH = /usr/local/Cellar/berkeley-db@4/4.8.30/lib
+    BDB_LIB_SUFFIX = -4.8
+
+    OPENSSL_INCLUDE_PATH = /Users/jianmingliu/Projects/ZCC/zccoin/deps/openssl-1.0.2u/include
+    OPENSSL_LIB_PATH = /Users/jianmingliu/Projects/ZCC/zccoin/deps/openssl-1.0.2u
+
+    MINIUPNPC_INCLUDE_PATH = /usr/local/include
+    MINIUPNPC_LIB_PATH = /usr/local/lib
+
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
+    QMAKE_CXXFLAGS += -Wno-deprecated-declarations -Wno-deprecated-register -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
+    QMAKE_LFLAGS += -Wl,-dead_strip
+}
 
 # Dependency library locations can be customized with:
 #    BOOST_INCLUDE_PATH, BOOST_LIB_PATH, BDB_INCLUDE_PATH,
@@ -115,6 +141,7 @@ contains(BITCOIN_NEED_QT_PLUGINS, 1) {
 QMAKE_CXXFLAGS += -msse2
 QMAKE_CFLAGS += -O3 -msse2
 QMAKE_CXXFLAGS_WARN_ON = -fdiagnostics-show-option -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter -Wstack-protector
+QMAKE_CXXFLAGS += -Wno-enum-constexpr-conversion
 
 # Input
 DEPENDPATH += src src/json src/qt
@@ -259,8 +286,6 @@ SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/qt/rpcconsole.cpp \
     src/noui.cpp \
     src/kernel.cpp \
-    src/scrypt-x86.S \
-    src/scrypt-x86_64.S \
     src/scrypt_mine.cpp \
     src/qt/miningpage.cpp \
     src/pbkdf2.cpp \
@@ -353,6 +378,12 @@ isEmpty(BOOST_INCLUDE_PATH) {
     macx:BOOST_INCLUDE_PATH = /opt/local/include
 }
 
+# Homebrew boost libs on macOS use -mt suffix; override defaults
+macx {
+    BOOST_LIB_SUFFIX = -mt
+    BOOST_THREAD_LIB_SUFFIX = -mt
+}
+
 windows:DEFINES += WIN32
 windows:RC_FILE = src/qt/res/bitcoin-qt.rc
 
@@ -381,11 +412,28 @@ macx:TARGET = "ZcCoin-Qt"
 macx:QMAKE_CFLAGS_THREAD += -pthread
 macx:QMAKE_LFLAGS_THREAD += -pthread
 macx:QMAKE_CXXFLAGS_THREAD += -pthread
+macx {
+    # Avoid asm scrypt on mac; use portable jane implementation
+    SOURCES -= src/scrypt-x86.S src/scrypt-x86_64.S
+}
 
 # Set libraries and includes at end, to use platform-defined defaults if not overridden
-INCLUDEPATH += $$BOOST_INCLUDE_PATH $$BDB_INCLUDE_PATH $$OPENSSL_INCLUDE_PATH $$QRENCODE_INCLUDE_PATH
-LIBS += $$join(BOOST_LIB_PATH,,-L,) $$join(BDB_LIB_PATH,,-L,) $$join(OPENSSL_LIB_PATH,,-L,) $$join(QRENCODE_LIB_PATH,,-L,)
-LIBS += -lssl -lcrypto -ldb_cxx$$BDB_LIB_SUFFIX
+QT_INCLUDEPATH = $$[QT_INSTALL_HEADERS]
+INCLUDEPATH = $$QT_INCLUDEPATH $$OPENSSL_INCLUDE_PATH $$BOOST_INCLUDE_PATH $$BDB_INCLUDE_PATH $$QRENCODE_INCLUDE_PATH $$INCLUDEPATH
+LIBS += $$join(OPENSSL_LIB_PATH,,-L,) $$join(BOOST_LIB_PATH,,-L,) $$join(BDB_LIB_PATH,,-L,) $$join(QRENCODE_LIB_PATH,,-L,)
+macx {
+    # Force static OpenSSL 1.0.x to avoid picking up Homebrew OpenSSL 3
+    LIBS += $$OPENSSL_LIB_PATH/libssl.a $$OPENSSL_LIB_PATH/libcrypto.a
+} else {
+    LIBS += -lssl -lcrypto
+}
+macx {
+    # Prefer static Berkeley DB to avoid runtime dylib dependency
+    LIBS += $$BDB_LIB_PATH/libdb_cxx-4.8.a $$BDB_LIB_PATH/libdb-4.8.a
+} else {
+    LIBS += -ldb_cxx$$BDB_LIB_SUFFIX
+}
+LIBS += -Wl,-search_paths_first
 # -lgdi32 has to happen after -lcrypto (see  #681)
 windows:LIBS += -lws2_32 -lshlwapi -lmswsock -lole32 -loleaut32 -luuid -lgdi32
 LIBS += -lboost_system$$BOOST_LIB_SUFFIX -lboost_filesystem$$BOOST_LIB_SUFFIX -lboost_program_options$$BOOST_LIB_SUFFIX -lboost_thread$$BOOST_THREAD_LIB_SUFFIX

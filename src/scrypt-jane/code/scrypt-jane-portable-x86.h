@@ -24,6 +24,18 @@
 	#endif
 #endif
 
+#if defined(__APPLE__) && defined(__MACH__)
+	#undef X86ASM
+	#undef X86ASM_SSE
+	#undef X86ASM_SSE2
+	#undef X86ASM_SSSE3
+	#undef X86ASM_AVX
+	#undef X86_64ASM
+	#undef X86_64ASM_SSE2
+	#undef X86_64ASM_SSSE3
+	#undef X86_64ASM_AVX
+#endif
+
 #if defined(COMPILER_MSVC) && (defined(CPU_X86_FORCE_INTRINSICS) || defined(CPU_X86_64))
 	#define X86_INTRINSIC
 	#if defined(CPU_X86_64) || defined(X86ASM_SSE)
@@ -229,22 +241,28 @@ get_cpuid(x86_regs *regs, uint32_t flags) {
 #if defined(COMPILER_MSVC)
 	__cpuid((int *)regs, (int)flags);
 #else
-	#if defined(CPU_X86_64)
-		#define cpuid_bx rbx
-	#else
-		#define cpuid_bx ebx
-	#endif
+	#if defined(X86ASM) || defined(X86_64ASM)
+		#if defined(CPU_X86_64)
+			#define cpuid_bx rbx
+		#else
+			#define cpuid_bx ebx
+		#endif
 
-	asm_gcc()
-		a1(push cpuid_bx)
-		a1(cpuid)
-		a2(mov [%1 + 0], eax)
-		a2(mov [%1 + 4], ebx)
-		a2(mov [%1 + 8], ecx)
-		a2(mov [%1 + 12], edx)
-		a1(pop cpuid_bx)
-		asm_gcc_parms() : "+a"(flags) : "S"(regs)  : "%ecx", "%edx", "cc"
-	asm_gcc_end()
+		asm_gcc()
+			a1(push cpuid_bx)
+			a1(cpuid)
+			a2(mov [%1 + 0], eax)
+			a2(mov [%1 + 4], ebx)
+			a2(mov [%1 + 8], ecx)
+			a2(mov [%1 + 12], edx)
+			a1(pop cpuid_bx)
+			asm_gcc_parms() : "+a"(flags) : "S"(regs)  : "%ecx", "%edx", "cc"
+		asm_gcc_end()
+	#else
+		/* Fallback when inline asm is unavailable */
+		(void)flags;
+		regs->eax = regs->ebx = regs->ecx = regs->edx = 0;
+	#endif
 #endif
 }
 
@@ -279,7 +297,7 @@ detect_cpu(void) {
 	uint64_t xgetbv_flags;
 #endif
 
-#if defined(CPU_X86)
+#if defined(CPU_X86) && (defined(X86ASM) || defined(X86_64ASM))
 	if (!has_cpuid())
 		return cpu_flags;
 #endif

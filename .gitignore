@@ -15,9 +15,11 @@ release
 *.qm
 Makefile
 bitcoin-qt
+ZcCoin-Qt.app
 #resources cpp
 qrc_*.cpp
 #qt creator
 *.pro.user
 #mac specific
 .DS_Store
+deps/

@@ -10,6 +10,9 @@
 #include <QMessageBox>
 #include <QTemporaryFile>
 #include <QImageWriter>
+#ifdef Q_OS_MAC
+#include <QProcess>
+#endif
 
 #ifdef USE_DBUS
 #include <QtDBus/QtDBus>
@@ -18,7 +21,6 @@
 
 #ifdef Q_OS_MAC
 #include <ApplicationServices/ApplicationServices.h>
-extern bool qt_mac_execute_apple_script(const QString &script, AEDesc *ret);
 #endif
 
 // https://wiki.ubuntu.com/NotificationDevelopmentGuidelines recommends at least 128
@@ -269,7 +271,9 @@ void Notificator::notifyGrowl(Class cls, const QString &title, const QString &te
     quotedTitle.replace("\\", "\\\\").replace("\"", "\\");
     quotedText.replace("\\", "\\\\").replace("\"", "\\");
     QString growlApp(this->mode == Notificator::Growl13 ? "Growl" : "GrowlHelperApp");
-    qt_mac_execute_apple_script(script.arg(notificationApp, quotedTitle, quotedText, notificationIcon, growlApp), 0);
+    const QString compiledScript = script.arg(notificationApp, quotedTitle, quotedText, notificationIcon, growlApp);
+    // Prefer using osascript to avoid depending on removed Qt private helper
+    QProcess::execute("/usr/bin/osascript", QStringList() << "-e" << compiledScript);
 }
 #endif
 

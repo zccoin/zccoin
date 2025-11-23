@@ -55,6 +55,7 @@ TESTDEFS += -DBOOST_TEST_DYN_LINK
 endif
 
 DEFS=-DMAC_OSX -DMSG_NOSIGNAL=0 -DBOOST_SPIRIT_THREADSAFE
+DEFS+= -DSCRYPT_KECCAK512 -DSCRYPT_CHACHA -DSCRYPT_CHOOSE_COMPILETIME
 
 ifdef RELEASE
 # Compile for maximum compatibility and smallest size.
@@ -62,7 +63,8 @@ ifdef RELEASE
 # the same way.
 CFLAGS = -mmacosx-version-min=10.5 -arch x86_64 -O3 -msse2
 else
-CFLAGS = -g -msse2
+# Default to optimized builds with LTO for faster binaries.
+CFLAGS = -O2 -flto -msse2
 endif
 
 # ppc doesn't work because we don't support big-endian
@@ -100,8 +102,7 @@ OBJS= \
     obj/pbkdf2.o \
     obj/kernel.o \
     obj/scrypt_mine.o \
-    obj/scrypt-x86.o \
-    obj/scrypt-x86_64.o
+    obj/scrypt-jane.o
 
 ifndef USE_UPNP
 	override USE_UPNP = -
@@ -119,7 +120,7 @@ ifneq (${USE_IPV6}, -)
 	DEFS += -DUSE_IPV6=$(USE_IPV6)
 endif
 
-all: novacoind
+all: zccoind
 
 test check: test_novacoin FORCE
 	./test_novacoin
@@ -140,13 +141,10 @@ obj/%.o: %.cpp
 	      -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
 	  rm -f $(@:%.o=%.d)
 
-obj/scrypt-x86.o: scrypt-x86.S
-	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+obj/scrypt-jane.o: scrypt-jane/scrypt-jane.c
+	clang -c $(CFLAGS) -std=gnu99 -MMD -o $@ $<
 
-obj/scrypt-x86_64.o: scrypt-x86_64.S
-	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
-
-novacoind: $(OBJS:obj/%=obj/%)
+zccoind: $(OBJS:obj/%=obj/%)
 	$(CXX) $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
@@ -158,11 +156,11 @@ obj-test/%.o: test/%.cpp
 	      -e '/^$$/ d' -e 's/$$/ :/' < $(@:%.o=%.d) >> $(@:%.o=%.P); \
 	  rm -f $(@:%.o=%.d)
 
-test_novacoin: $(TESTOBJS) $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
+test_zccoin: $(TESTOBJS) $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
 	$(CXX) $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS) $(TESTLIBS)
 
 clean:
-	-rm -f novacoind test_novacoin
+	-rm -f novacoind zccoind test_novacoin test_zccoin
 	-rm -f obj/*.o
 	-rm -f obj-test/*.o
 	-rm -f obj/*.P

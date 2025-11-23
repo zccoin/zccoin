@@ -117,8 +117,7 @@ int main(int argc, char *argv[])
     ipcScanRelay(argc, argv);
 
     // Internal string conversion is all UTF-8
-    QTextCodec::setCodecForTr(QTextCodec::codecForName("UTF-8"));
-    QTextCodec::setCodecForCStrings(QTextCodec::codecForTr());
+    // Qt5.15 removed setCodecForTr/CStrings; UTF-8 is default in modern Qt.
 
     Q_INIT_RESOURCE(bitcoin);
     QApplication app(argc, argv);
