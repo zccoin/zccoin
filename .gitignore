@@ -23,3 +23,5 @@ qrc_*.cpp
 #mac specific
 .DS_Store
 deps/
+debug.log
+peers.dat

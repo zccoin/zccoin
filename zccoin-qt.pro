@@ -28,21 +28,21 @@ QMAKE_CXXFLAGS += -std=gnu++17 -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCT
  BOOST_LIB_SUFFIX = -mgw46-mt-s-1_50
 
 macx {
-    # Homebrew / local paths
-    BOOST_INCLUDE_PATH = /usr/local/include
-    BOOST_LIB_PATH = /usr/local/lib
-    BOOST_LIB_SUFFIX = -mt
-    BOOST_THREAD_LIB_SUFFIX = -mt
+    DEPS_ROOT = $$PWD/deps/local-10.15
+    BOOST_INCLUDE_PATH = $$DEPS_ROOT/boost/include
+    BOOST_LIB_PATH = $$DEPS_ROOT/boost/lib
+    BOOST_LIB_SUFFIX =
+    BOOST_THREAD_LIB_SUFFIX =
 
-    BDB_INCLUDE_PATH = /usr/local/Cellar/berkeley-db@4/4.8.30/include
-    BDB_LIB_PATH = /usr/local/Cellar/berkeley-db@4/4.8.30/lib
+    BDB_INCLUDE_PATH = $$DEPS_ROOT/db48/include
+    BDB_LIB_PATH = $$DEPS_ROOT/db48/lib
     BDB_LIB_SUFFIX = -4.8
 
-    OPENSSL_INCLUDE_PATH = /Users/jianmingliu/Projects/ZCC/zccoin/deps/openssl-1.0.2u/include
-    OPENSSL_LIB_PATH = /Users/jianmingliu/Projects/ZCC/zccoin/deps/openssl-1.0.2u
+    OPENSSL_INCLUDE_PATH = $$DEPS_ROOT/openssl/include
+    OPENSSL_LIB_PATH = $$DEPS_ROOT/openssl/lib
 
-    MINIUPNPC_INCLUDE_PATH = /usr/local/include
-    MINIUPNPC_LIB_PATH = /usr/local/lib
+    MINIUPNPC_INCLUDE_PATH = $$DEPS_ROOT/miniupnpc/include
+    MINIUPNPC_LIB_PATH = $$DEPS_ROOT/miniupnpc/lib
 
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
     QMAKE_CXXFLAGS += -Wno-deprecated-declarations -Wno-deprecated-register -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1
@@ -99,7 +99,11 @@ contains(USE_UPNP, -) {
     }
     DEFINES += USE_UPNP=$$USE_UPNP STATICLIB
     INCLUDEPATH += $$MINIUPNPC_INCLUDE_PATH
-    LIBS += $$join(MINIUPNPC_LIB_PATH,,-L,) -lminiupnpc
+    macx {
+        LIBS += $$join(MINIUPNPC_LIB_PATH,,-L,) $$MINIUPNPC_LIB_PATH/libminiupnpc.a
+    } else {
+        LIBS += $$join(MINIUPNPC_LIB_PATH,,-L,) -lminiupnpc
+    }
     win32:LIBS += -liphlpapi
 }
 
@@ -359,7 +363,7 @@ isEmpty(BOOST_THREAD_LIB_SUFFIX) {
 }
 
 isEmpty(BDB_LIB_PATH) {
-    macx:BDB_LIB_PATH = /opt/local/lib/db48
+    macx:BDB_LIB_PATH = $$PWD/deps/local-10.15/db48/lib
 }
 
 isEmpty(BDB_LIB_SUFFIX) {
@@ -367,21 +371,20 @@ isEmpty(BDB_LIB_SUFFIX) {
 }
 
 isEmpty(BDB_INCLUDE_PATH) {
-    macx:BDB_INCLUDE_PATH = /opt/local/include/db48
+    macx:BDB_INCLUDE_PATH = $$PWD/deps/local-10.15/db48/include
 }
 
 isEmpty(BOOST_LIB_PATH) {
-    macx:BOOST_LIB_PATH = /opt/local/lib
+    macx:BOOST_LIB_PATH = $$PWD/deps/local-10.15/boost/lib
 }
 
 isEmpty(BOOST_INCLUDE_PATH) {
-    macx:BOOST_INCLUDE_PATH = /opt/local/include
+    macx:BOOST_INCLUDE_PATH = $$PWD/deps/local-10.15/boost/include
 }
 
-# Homebrew boost libs on macOS use -mt suffix; override defaults
 macx {
-    BOOST_LIB_SUFFIX = -mt
-    BOOST_THREAD_LIB_SUFFIX = -mt
+    BOOST_LIB_SUFFIX =
+    BOOST_THREAD_LIB_SUFFIX =
 }
 
 windows:DEFINES += WIN32
@@ -436,7 +439,12 @@ macx {
 LIBS += -Wl,-search_paths_first
 # -lgdi32 has to happen after -lcrypto (see  #681)
 windows:LIBS += -lws2_32 -lshlwapi -lmswsock -lole32 -loleaut32 -luuid -lgdi32
-LIBS += -lboost_system$$BOOST_LIB_SUFFIX -lboost_filesystem$$BOOST_LIB_SUFFIX -lboost_program_options$$BOOST_LIB_SUFFIX -lboost_thread$$BOOST_THREAD_LIB_SUFFIX
+macx {
+    # Link Boost statically to avoid missing dylibs at runtime
+    LIBS += $$BOOST_LIB_PATH/libboost_system.a $$BOOST_LIB_PATH/libboost_filesystem.a $$BOOST_LIB_PATH/libboost_program_options.a $$BOOST_LIB_PATH/libboost_thread.a
+} else {
+    LIBS += -lboost_system$$BOOST_LIB_SUFFIX -lboost_filesystem$$BOOST_LIB_SUFFIX -lboost_program_options$$BOOST_LIB_SUFFIX -lboost_thread$$BOOST_THREAD_LIB_SUFFIX
+}
 windows:LIBS += -lboost_chrono$$BOOST_LIB_SUFFIX
 
 contains(RELEASE, 1) {

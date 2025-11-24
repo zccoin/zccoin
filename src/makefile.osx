@@ -6,18 +6,23 @@
 # Mac OS X makefile for bitcoin
 # Originally by Laszlo Hanyecz (solar@heliacal.net)
 
-CXX=llvm-g++
-DEPSDIR=/opt/local
+CXX=/Library/Developer/CommandLineTools/usr/bin/clang++
+DEPSDIR:=$(CURDIR)/../deps/local-10.15
+SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
 INCLUDEPATHS= \
  -I"$(CURDIR)" \
  -I"$(CURDIR)"/obj \
- -I"$(DEPSDIR)/include" \
- -I"$(DEPSDIR)/include/db48"
+ -I"$(DEPSDIR)/boost/include" \
+ -I"$(DEPSDIR)/db48/include" \
+ -I"$(DEPSDIR)/openssl/include" \
+ -I"$(DEPSDIR)/miniupnpc/include"
 
 LIBPATHS= \
- -L"$(DEPSDIR)/lib" \
- -L"$(DEPSDIR)/lib/db48"
+ -L"$(DEPSDIR)/boost/lib" \
+ -L"$(DEPSDIR)/db48/lib" \
+ -L"$(DEPSDIR)/openssl/lib" \
+ -L"$(DEPSDIR)/miniupnpc/lib"
 
 USE_UPNP:=1
 USE_IPV6:=1
@@ -29,25 +34,27 @@ TESTDEFS = -DTEST_DATA_DIR=$(abspath test/data)
 ifdef STATIC
 # Build STATIC if you are redistributing the bitcoind binary
 TESTLIBS += \
- $(DEPSDIR)/lib/libboost_unit_test_framework-mt.a
+ $(DEPSDIR)/boost/lib/libboost_unit_test_framework.a
 LIBS += \
- $(DEPSDIR)/lib/db48/libdb_cxx-4.8.a \
- $(DEPSDIR)/lib/libboost_system-mt.a \
- $(DEPSDIR)/lib/libboost_filesystem-mt.a \
- $(DEPSDIR)/lib/libboost_program_options-mt.a \
- $(DEPSDIR)/lib/libboost_thread-mt.a \
- $(DEPSDIR)/lib/libssl.a \
- $(DEPSDIR)/lib/libcrypto.a \
+ $(DEPSDIR)/db48/lib/libdb_cxx-4.8.a \
+ $(DEPSDIR)/db48/lib/libdb-4.8.a \
+ $(DEPSDIR)/boost/lib/libboost_system.a \
+ $(DEPSDIR)/boost/lib/libboost_filesystem.a \
+ $(DEPSDIR)/boost/lib/libboost_program_options.a \
+ $(DEPSDIR)/boost/lib/libboost_thread.a \
+ $(DEPSDIR)/openssl/lib/libssl.a \
+ $(DEPSDIR)/openssl/lib/libcrypto.a \
  -lz
 else
 TESTLIBS += \
- -lboost_unit_test_framework-mt
+ -lboost_unit_test_framework
 LIBS += \
  -ldb_cxx-4.8 \
- -lboost_system-mt \
- -lboost_filesystem-mt \
- -lboost_program_options-mt \
- -lboost_thread-mt \
+ -ldb-4.8 \
+ -lboost_system \
+ -lboost_filesystem \
+ -lboost_program_options \
+ -lboost_thread \
  -lssl \
  -lcrypto \
  -lz
@@ -67,9 +74,12 @@ else
 CFLAGS = -O2 -flto -msse2
 endif
 
+CFLAGS += -isysroot $(SDKROOT) -mmacosx-version-min=10.15
+CFLAGS += -isystem $(SDKROOT)/usr/include/c++/v1
+
 # ppc doesn't work because we don't support big-endian
 CFLAGS += -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter \
-    $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
+    -Wno-enum-constexpr-conversion $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
 
 OBJS= \
     obj/alert.o \
@@ -110,9 +120,9 @@ endif
 ifneq (${USE_UPNP}, -)
 	DEFS += -DUSE_UPNP=$(USE_UPNP)
 ifdef STATIC
-	LIBS += $(DEPSDIR)/lib/libminiupnpc.a
+	LIBS += $(DEPSDIR)/miniupnpc/lib/libminiupnpc.a
 else
-	LIBS += -lminiupnpc
+	LIBS += $(DEPSDIR)/miniupnpc/lib/libminiupnpc.a
 endif
 endif
 

@@ -648,10 +648,13 @@ bool AppInit2()
         AddOneShot(strDest);
     // TODO: replace this by DNSseed
     //AddOneShot(string("209.141.52.81"));
-	//AddOneShot(string("36.32.160.158"));
-	//AddOneShot(string("131.151.102.205"));
-	//AddOneShot(string("131.151.101.110"));
+    //AddOneShot(string("36.32.160.158"));
+    //AddOneShot(string("131.151.102.205"));
+    //AddOneShot(string("131.151.101.110"));
     // ********************************************************* Step 7: load blockchain
+    printf("AppInit2: data directory %s (testnet=%d)\n", GetDataDir().string().c_str(), fTestNet ? 1 : 0);
+    if (GetBoolArg("-reindex", false))
+        printf("AppInit2: -reindex requested (not implemented in this tree, continuing without reindex)\n");
 
     if (!bitdb.Open(GetDataDir()))
     {
@@ -670,7 +673,7 @@ bool AppInit2()
     }
 
     uiInterface.InitMessage(_("<b>Loading block index, this may take several minutes...</b>"));
-    printf("Loading block index, this may take several minutes...\n");
+    printf("Loading block index, this may take several minutes... (fAllowNew=1)\n");
     nStart = GetTimeMillis();
     if (!LoadBlockIndex())
         return InitError(_("Error loading blkindex.dat"));
@@ -683,7 +686,7 @@ bool AppInit2()
         printf("Shutdown requested. Exiting.\n");
         return false;
     }
-    printf(" block index %15" PRI64d"ms\n", GetTimeMillis() - nStart);
+    printf(" block index %15" PRI64d"ms (entries=%u height=%d)\n", GetTimeMillis() - nStart, (unsigned int)mapBlockIndex.size(), nBestHeight);
 
     if (GetBoolArg("-printblockindex") || GetBoolArg("-printblocktree"))
     {

@@ -14,6 +14,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <list>
+#include <unordered_map>
 
 using namespace std;
 using namespace boost;
@@ -70,9 +72,19 @@ static const size_t MAX_TXINDEX_CACHE = 5000;
 
 static CCriticalSection cs_txindexcache;
 static std::map<uint256, CTxIndex> mapTxIndexCache;
+
+struct Uint256Hasher
+{
+    size_t operator()(const uint256& key) const
+    {
+        const uint64_t* p = reinterpret_cast<const uint64_t*>(&key);
+        return p[0] ^ p[3];
+    }
+};
+
 static CCriticalSection cs_scriptcache;
-static std::map<uint256, bool> mapScriptVerifyCache;
-static std::deque<uint256> vScriptCacheOrder;
+static std::unordered_map<uint256, std::list<uint256>::iterator, Uint256Hasher> mapScriptVerifyCache;
+static std::list<uint256> vScriptCacheOrder;
 
 map<uint256, CDataStream*> mapOrphanTransactions;
 map<uint256, map<uint256, CDataStream*> > mapOrphanTransactionsByPrev;
@@ -257,7 +269,13 @@ static void SetCachedTxIndex(const uint256& hash, const CTxIndex& txindex)
 static bool CheckScriptCache(const uint256& key)
 {
     LOCK(cs_scriptcache);
-    return mapScriptVerifyCache.count(key) != 0;
+    std::unordered_map<uint256, std::list<uint256>::iterator, Uint256Hasher>::iterator it = mapScriptVerifyCache.find(key);
+    if (it == mapScriptVerifyCache.end())
+        return false;
+    // Touch entry to keep it fresh in LRU
+    vScriptCacheOrder.splice(vScriptCacheOrder.end(), vScriptCacheOrder, it->second);
+    it->second = --vScriptCacheOrder.end();
+    return true;
 }
 
 static void SetScriptCache(const uint256& key)
@@ -265,10 +283,13 @@ static void SetScriptCache(const uint256& key)
     LOCK(cs_scriptcache);
     if (mapScriptVerifyCache.count(key))
         return;
-    mapScriptVerifyCache[key] = true;
     vScriptCacheOrder.push_back(key);
+    std::list<uint256>::iterator itNew = --vScriptCacheOrder.end();
+    mapScriptVerifyCache[key] = itNew;
+
     if (vScriptCacheOrder.size() > MAX_SCRIPTCACHE_SIZE)
     {
+        // Evict the least recently used entry
         uint256 evict = vScriptCacheOrder.front();
         vScriptCacheOrder.pop_front();
         mapScriptVerifyCache.erase(evict);
@@ -2737,12 +2758,21 @@ bool LoadBlockIndex(bool fAllowNew)
         nCoinbaseMaturity = 60;
     }
 
+    printf("LoadBlockIndex(): start fAllowNew=%d datadir=%s mapBlockIndex.size()=%u\n",
+        fAllowNew ? 1 : 0, GetDataDir().string().c_str(), (unsigned int)mapBlockIndex.size());
+
     //
     // Load block index
     //
+    int64 nLoadIndexStart = GetTimeMillis();
     CTxDB txdb("cr");
     if (!txdb.LoadBlockIndex())
+    {
+        printf("LoadBlockIndex(): txdb.LoadBlockIndex failed after %" PRI64d"ms\n", GetTimeMillis() - nLoadIndexStart);
         return false;
+    }
+    printf("LoadBlockIndex(): txdb.LoadBlockIndex completed in %" PRI64d"ms (entries=%u)\n",
+        GetTimeMillis() - nLoadIndexStart, (unsigned int)mapBlockIndex.size());
     txdb.Close();
 
     //
@@ -2750,6 +2780,7 @@ bool LoadBlockIndex(bool fAllowNew)
     //
     if (mapBlockIndex.empty())
     {
+        printf("LoadBlockIndex(): mapBlockIndex empty, initializing genesis (fAllowNew=%d)\n", fAllowNew ? 1 : 0);
         if (!fAllowNew)
             return false;
 
@@ -2792,38 +2823,43 @@ bool LoadBlockIndex(bool fAllowNew)
         printf("block.hashMerkleRoot == %s\n", block.hashMerkleRoot.ToString().c_str());
         assert(block.hashMerkleRoot == uint256("0x8a045fdd5a763fcca3ff30e9c5e323289480f48062fa8a3b7eb8bd896cf9fd2f"));
         block.print();
-		//
-		        {
-                    unsigned int max_nonce = 0xffff0000;
-                    block_header res_header;
-                    uint256 result;
-                    unsigned int nHashesDone = 0;
-                    unsigned int nNonceFound;
-                    CBigNum bnTarget;
-                    bnTarget.SetCompact(block.nBits);
-                    printf("bnTarget: %s \n", bnTarget.getuint256().ToString().c_str());
+        if (GetBoolArg("-minegenesis", false))
+        {
+            unsigned int max_nonce = 0xffff0000;
+            block_header res_header;
+            uint256 result;
+            unsigned int nHashesDone = 0;
+            unsigned int nNonceFound;
+            CBigNum bnTarget;
+            bnTarget.SetCompact(block.nBits);
+            printf("bnTarget: %s \n", bnTarget.getuint256().ToString().c_str());
 
-                    do {
-                    nNonceFound = scanhash_scrypt(
-                                (block_header *)&block.nVersion,
-                                max_nonce,
-                                nHashesDone,
-                                UBEGIN(result),
-                                &res_header,
-                                GetNfactor(block.nTime)
-                    );
-                    if (-1 == nNonceFound || result > bnTarget.getuint256()) {
-                        block.nTime++;
-                        continue;
-                    }
-                    } while(result > bnTarget.getuint256());
-
-                    printf("hashfound: %s with nonce %d\n", result.ToString().c_str(), nNonceFound);
-					block.fHashed = false;
-					block.SetHash(result);
-					printf("block.GetHash() == %s\n", block.GetHash().ToString().c_str());
+            do {
+                nNonceFound = scanhash_scrypt(
+                            (block_header *)&block.nVersion,
+                            max_nonce,
+                            nHashesDone,
+                            UBEGIN(result),
+                            &res_header,
+                            GetNfactor(block.nTime)
+                );
+                if (-1 == nNonceFound || result > bnTarget.getuint256()) {
+                    block.nTime++;
+                    continue;
                 }
-		//
+            } while(result > bnTarget.getuint256());
+
+            printf("hashfound: %s with nonce %d\n", result.ToString().c_str(), nNonceFound);
+            block.fHashed = false;
+            block.SetHash(result);
+            printf("block.GetHash() == %s\n", block.GetHash().ToString().c_str());
+        }
+        else
+        {
+            block.fHashed = false;
+            block.SetHash(hashGenesisBlock);
+            printf("LoadBlockIndex(): using hardcoded genesis hash %s (skipping pow scan)\n", block.GetHash().ToString().c_str());
+        }
         assert(block.GetHash() == hashGenesisBlock);
         //assert(block.CheckBlock());
         //block.CheckBlock();
@@ -4649,12 +4685,13 @@ void BitcoinMiner(CWallet *pwallet, bool fProofOfStake)
     // Each thread has its own key and counter
     CReserveKey reservekey(pwallet);
     unsigned int nExtraNonce = 0;
+    const bool fBenchMode = GetBoolArg("-bench", false);
 
     while (fGenerateBitcoins || fProofOfStake)
     {
         if (fShutdown)
             return;
-        while (vNodes.empty() || IsInitialBlockDownload()|| (fProofOfStake && vNodes.size() < 3 && nBestHeight < GetNumBlocksOfPeers()))
+        while (!fBenchMode && (vNodes.empty() || IsInitialBlockDownload()|| (fProofOfStake && vNodes.size() < 3 && nBestHeight < GetNumBlocksOfPeers())))
         {
             Sleep(1000);
             if (fShutdown)
@@ -4862,6 +4899,9 @@ void GenerateBitcoins(bool fGenerate, CWallet* pwallet)
         if (fLimitProcessors && nProcessors > nLimitProcessors)
             nProcessors = nLimitProcessors;
         int nAddThreads = nProcessors - vnThreadsRunning[THREAD_MINER];
+        printf("GenerateBitcoins: fGenerate=%d bench=%d nLimitProcessors=%d vnThreadsRunning=%d nAddThreads=%d\n",
+               fGenerateBitcoins ? 1 : 0, GetBoolArg("-bench", false) ? 1 : 0,
+               nLimitProcessors, vnThreadsRunning[THREAD_MINER], nAddThreads);
         printf("Starting %d BitcoinMiner threads\n", nAddThreads);
         for (int i = 0; i < nAddThreads; i++)
         {
